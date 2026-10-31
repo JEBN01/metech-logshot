@@ -217,7 +217,8 @@ textarea{min-height:104px;resize:vertical}
   </div>
   <label class="ck2"><input type="checkbox" id="eStamp"><span><b>Write location, time and note on the photos</b><br><span class="sub">The text is added at the bottom of each photo in the file. The original on the phone stays clean.</span></span></label>
   <div class="prog" id="eProg" style="display:none"><i id="eBar"></i></div>
-  <div class="row" style="margin-top:16px"><button class="btn" id="eSend">Send</button><button class="btn sec" id="eSave">Save to phone</button></div>
+  <div class="note" id="eStat" style="margin-top:14px"></div>
+  <div class="row" style="margin-top:10px"><button class="btn" id="eSend">Send</button><button class="btn sec" id="eSave">Save to phone</button></div>
   <div class="note" id="eNote">Send opens the phone share list (Drive, mail, WhatsApp, Nearby Share). Save puts the file in Downloads.</div>
 </div></div>
 
@@ -471,8 +472,9 @@ function openExport(a){
   var lf="docx";try{lf=localStorage.getItem(FKEY)||"docx"}catch(e){}
   var rb=document.querySelector('input[name="fmt"][value="'+lf+'"]')||document.querySelector('input[name="fmt"][value="docx"]');rb.checked=true;
   $("eStamp").checked=!!SET.stamp;$("eProg").style.display="none";$("ovE").className="ov on";
+  prepare();
 }
-$("eClose").onclick=function(){$("ovE").className="ov"};
+$("eClose").onclick=function(){$("ovE").className="ov";PRE={key:"",files:null}};
 function fileName(r,n,single){
   var s=slug(r.loc);return fstr(r.ts)+"_"+(s||"photo")+(single?"":"_"+p2(n))+".jpg";
 }
@@ -558,10 +560,15 @@ function download(blob,name){
   setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(u)},4000);
 }
 async function shareFiles(files){
+  var why="";
   try{
-    if(navigator.canShare&&navigator.canShare({files:files})){await navigator.share({files:files,title:"ME-Tech photos"});return true}
-  }catch(e){if(e&&e.name==="AbortError")return true}
-  files.forEach(function(f){download(f,f.name)});toast("Share is not available here, the file was saved instead");return false;
+    if(!navigator.share)why="no share function in this browser";
+    else if(!navigator.canShare)why="no file sharing in this browser";
+    else if(!navigator.canShare({files:files}))why="this file type cannot be shared from here";
+    else{await navigator.share({files:files,title:"ME-Tech Logshot"});return true}
+  }catch(e){if(e&&e.name==="AbortError")return true;why="error "+((e&&e.name)||"")}
+  files.forEach(function(f,i){setTimeout(function(){download(f,f.name)},i*400)});
+  toast("Could not open the share list ("+why+"). The file was saved in Downloads instead.",7000);return false;
 }
 /* ---------- Word ---------- */
 function wpara(text,o){
@@ -664,7 +671,7 @@ async function buildPdf(a,stamp){
 /* ---------- export buttons ---------- */
 var FKEY="metech_photo_fmt_v1";
 function curFmt(){var r=document.querySelector('input[name="fmt"]:checked');return r?r.value:"docx"}
-document.querySelectorAll('input[name="fmt"]').forEach(function(r){r.onchange=function(){try{localStorage.setItem(FKEY,r.value)}catch(e){}}});
+document.querySelectorAll('input[name="fmt"]').forEach(function(r){r.onchange=function(){try{localStorage.setItem(FKEY,r.value)}catch(e){}if(EXP.length)prepare()}});
 function saveCopy(blob,ts){try{download(new File([blob],fstr(ts)+"_photo.jpg",{type:"image/jpeg"}),fstr(ts)+"_photo.jpg")}catch(e){}}
 function outName(ext){return "ME-Tech Logshot "+fstr(Date.now())+"."+ext}
 async function buildOut(){
@@ -676,15 +683,27 @@ async function buildOut(){
   for(var i=0;i<a.length;i++){var b=stamp?await stampBlob(a[i]):a[i].blob;fs.push(new File([b],fileName(a[i],i+1,false),{type:"image/jpeg"}));prog((i+1)/a.length)}
   return fs;
 }
-$("eSend").onclick=async function(){
-  if(!EXP.length)return;$("eSend").disabled=true;
-  try{await shareFiles(await buildOut())}catch(e){toast("Could not make the file")}
-  $("eSend").disabled=false;
+var PRE={key:"",files:null};
+function preKey(){return curFmt()+"|"+($("eStamp").checked?1:0)+"|"+EXP.map(function(r){return r.id}).join(",")}
+function prepare(){
+  var key=preKey();PRE={key:key,files:null};
+  $("eSend").disabled=true;$("eSave").disabled=true;$("eStat").textContent="Preparing the file ...";
+  buildOut().then(function(fs){
+    if(PRE.key!==key)return;PRE.files=fs;
+    var tot=0;fs.forEach(function(f){tot+=f.size});
+    $("eStat").textContent="Ready: "+(fs.length>1?fs.length+" photos":fs[0].name)+", "+(tot/1048576).toFixed(1)+" MB";
+    $("eSend").disabled=false;$("eSave").disabled=false;$("eProg").style.display="none";
+  }).catch(function(){if(PRE.key===key)$("eStat").textContent="Could not make the file"});
+}
+$("eStamp").onchange=prepare;
+$("eSend").onclick=function(){
+  if(!PRE.files){toast("Wait, the file is being made");return}
+  shareFiles(PRE.files);
 };
-$("eSave").onclick=async function(){
-  if(!EXP.length)return;$("eSave").disabled=true;
-  try{var fs=await buildOut();fs.forEach(function(f,i){setTimeout(function(){download(f,f.name)},i*400)});toast(fs.length>1?"Photos saved in Downloads":"Saved in Downloads")}catch(e){toast("Could not make the file")}
-  $("eSave").disabled=false;
+$("eSave").onclick=function(){
+  if(!PRE.files){toast("Wait, the file is being made");return}
+  var fs=PRE.files;fs.forEach(function(f,i){setTimeout(function(){download(f,f.name)},i*400)});
+  toast(fs.length>1?"Photos saved in Downloads":"Saved in Downloads");
 };
 
 /* ---------- settings ---------- */
