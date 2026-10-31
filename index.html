@@ -115,7 +115,10 @@ textarea{min-height:104px;resize:vertical}
 .meta{font-size:13px;color:var(--muted);margin-top:10px}
 .toast{position:fixed;left:50%;bottom:calc(86px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--navy);color:#fff;padding:11px 16px;border-radius:3px;font-size:14px;font-weight:500;z-index:80;display:none;max-width:90%}
 .toast.on{display:block}
-.fmts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg{display:flex;border:1px solid var(--line);border-radius:3px;overflow:hidden;margin-top:14px}
+.seg button{flex:1;border:0;background:#fff;color:var(--navy);padding:13px 8px;font-weight:600;font-size:15px}
+.seg button.on{background:var(--navy);color:#fff}
+.fmts{margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .fmt{display:block;cursor:pointer}
 .fmt input{position:absolute;opacity:0;pointer-events:none}
 .fmt span{display:block;border:1px solid var(--line);border-radius:3px;padding:10px 12px;height:100%;background:#fff}
@@ -215,19 +218,17 @@ textarea{min-height:104px;resize:vertical}
 <div class="ov" id="ovE"><div class="sheet">
   <div class="hd"><div class="eyebrow" style="margin:0">Export</div><button class="ib" id="eClose" aria-label="Close">&#10005;</button></div>
   <h1 id="eTitle">0 photos</h1>
-  <label class="f" style="margin-top:12px">Format</label>
+  <div class="seg" id="eMode"><button type="button" data-m="save">Save to phone</button><button type="button" data-m="send">Send</button></div>
   <div class="fmts" id="fmts">
-    <label class="fmt"><input type="radio" name="fmt" value="doc"><span><b>Word page (.doc)</b><i>Opens in Word with a double click. Your phone may refuse to send it</i></span></label>
-    <label class="fmt"><input type="radio" name="fmt" value="html"><span><b>Web page (.html)</b><i>Phones can send it. Opens in the browser, or use Open with Word</i></span></label>
-    <label class="fmt"><input type="radio" name="fmt" value="docx"><span><b>Word file</b><i>A real .docx. Some phones cannot send it directly</i></span></label>
-    <label class="fmt"><input type="radio" name="fmt" value="pdf"><span><b>PDF</b><i>Ready to read or send, cannot be edited</i></span></label>
-    <label class="fmt"><input type="radio" name="fmt" value="zip"><span><b>ZIP</b><i>Each photo as a file named with date and place, plus a list of the notes</i></span></label>
-    <label class="fmt"><input type="radio" name="fmt" value="img"><span><b>Photos only</b><i>The photos without a list, to share straight away</i></span></label>
+    <label class="fmt" data-g="save"><input type="radio" name="fmt" value="docx"><span><b>Word file</b><i>Photos and notes in a Word file you can edit</i></span></label>
+    <label class="fmt" data-g="save"><input type="radio" name="fmt" value="zip"><span><b>ZIP</b><i>Each photo as a file named with date and place, plus a list of the notes</i></span></label>
+    <label class="fmt" data-g="send"><input type="radio" name="fmt" value="pdf"><span><b>PDF</b><i>Ready to read or send, cannot be edited</i></span></label>
+    <label class="fmt" data-g="send"><input type="radio" name="fmt" value="img"><span><b>Photos only</b><i>The photos without a list</i></span></label>
   </div>
   <label class="ck2"><input type="checkbox" id="eStamp"><span><b>Write location, time and note on the photos</b><br><span class="sub">The text is added at the bottom of each photo in the file. The original on the phone stays clean.</span></span></label>
   <div class="prog" id="eProg" style="display:none"><i id="eBar"></i></div>
   <div class="note" id="eStat" style="margin-top:14px"></div>
-  <div class="row" style="margin-top:10px"><button class="btn" id="eSend">Send</button><button class="btn sec" id="eSave">Save to phone</button></div>
+  <div class="row" style="margin-top:10px"><button class="btn full" id="eSend">Send</button><button class="btn full" id="eSave">Save to phone</button></div>
   <div class="note" id="eNote">Send opens the phone share list (Drive, mail, WhatsApp, Nearby Share). Save puts the file in Downloads.</div>
 </div></div>
 
@@ -489,8 +490,8 @@ var EXP=[];
 function openExport(a){
   EXP=a.slice().sort(function(x,y){return x.ts-y.ts});
   $("eTitle").textContent=EXP.length+(EXP.length===1?" photo":" photos");
-  var lf="doc";try{lf=localStorage.getItem(FKEY)||"doc"}catch(e){}
-  var rb=document.querySelector('input[name="fmt"][value="'+lf+'"]')||document.querySelector('input[name="fmt"][value="doc"]');rb.checked=true;
+  var m="save";try{m=localStorage.getItem(MKEY)||"save"}catch(e){}
+  setMode(m==="send"?"send":"save");
   $("eStamp").checked=!!SET.stamp;$("eProg").style.display="none";$("ovE").className="ov on";
   prepare();
 }
@@ -622,21 +623,6 @@ async function buildDocx(a,stamp){
   return new Blob([buildZip(all)],{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
 }
 
-/* ---------- Word page (one html file, opens in Word) ---------- */
-function dataUri(blob){return new Promise(function(res){var r=new FileReader();r.onload=function(){res(r.result)};r.readAsDataURL(blob)})}
-async function buildWordHtml(a,stamp,asDoc){
-  var h=(asDoc?'<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>ME-Tech Logshot</title><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->':'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>ME-Tech Logshot</title>')+'<style>body{font-family:Calibri,"Segoe UI",Arial,sans-serif;font-size:11pt;color:#10263b}h1{color:#0a2a4a;font-size:20pt}p{margin:0 0 6pt 0}.l{font-weight:bold;color:#0a2a4a}.m{color:#5a6f82;font-size:9pt}</style></head><body><h1>ME-Tech Logshot</h1><p class="m">'+a.length+(a.length===1?" photo":" photos")+", exported "+dstr(Date.now())+" "+tstr(Date.now())+"</p><br>";
-  for(var i=0;i<a.length;i++){
-    var r=a[i],b=stamp?await stampBlob(r):r.blob,uri=await dataUri(b);prog((i+1)/(a.length+1));
-    var k=Math.min(600/r.w,420/r.h),w=Math.round(r.w*k),hh=Math.round(r.h*k);
-    h+='<p style="page-break-after:avoid"><img src="'+uri+'" width="'+w+'" height="'+hh+'" alt=""></p><p class="l" style="page-break-after:avoid">'+esc(r.loc||"No location")+" &nbsp; "+dstr(r.ts)+" "+tstr(r.ts)+(r.lat!=null?" &nbsp; GPS "+r.lat.toFixed(5)+", "+r.lon.toFixed(5):"")+"</p>";
-    if(r.note)h+="<p>"+esc(r.note).replace(/\n/g,"<br>")+"</p>";
-    h+="<br>";
-  }
-  prog(1);
-  return new Blob([h+"</body></html>"],{type:asDoc?"application/msword":"text/html"});
-}
-
 /* ---------- PDF ---------- */
 function pdfTxt(t){
   var o="";
@@ -704,16 +690,24 @@ async function buildPdf(a,stamp){
 }
 
 /* ---------- export buttons ---------- */
-var FKEY="metech_photo_fmt_v1";
-function curFmt(){var r=document.querySelector('input[name="fmt"]:checked');return r?r.value:"doc"}
-document.querySelectorAll('input[name="fmt"]').forEach(function(r){r.onchange=function(){try{localStorage.setItem(FKEY,r.value)}catch(e){}if(EXP.length)prepare()}});
+var MODE="save",MKEY="metech_photo_mode_v1",GRP={save:["docx","zip"],send:["pdf","img"]};
+function curFmt(){var r=document.querySelector('input[name="fmt"]:checked');return r?r.value:"docx"}
+function setMode(m){
+  MODE=m;try{localStorage.setItem(MKEY,m)}catch(e){}
+  document.querySelectorAll("#eMode button").forEach(function(b){b.classList.toggle("on",b.getAttribute("data-m")===m)});
+  document.querySelectorAll("#fmts .fmt").forEach(function(l){l.style.display=l.getAttribute("data-g")===m?"":"none"});
+  var lf="";try{lf=localStorage.getItem("metech_photo_fmt_"+m)||""}catch(e){}
+  if(GRP[m].indexOf(lf)<0)lf=GRP[m][0];
+  document.querySelector('input[name="fmt"][value="'+lf+'"]').checked=true;
+  $("eSend").style.display=m==="send"?"":"none";$("eSave").style.display=m==="save"?"":"none";
+}
+document.querySelectorAll("#eMode button").forEach(function(b){b.onclick=function(){setMode(b.getAttribute("data-m"));if(EXP.length)prepare()}});
+document.querySelectorAll('input[name="fmt"]').forEach(function(r){r.onchange=function(){try{localStorage.setItem("metech_photo_fmt_"+MODE,r.value)}catch(e){}if(EXP.length)prepare()}});
 function saveCopy(blob,ts){try{download(new File([blob],fstr(ts)+"_photo.jpg",{type:"image/jpeg"}),fstr(ts)+"_photo.jpg")}catch(e){}}
 function outName(ext){return "ME-Tech Logshot "+fstr(Date.now())+"."+ext}
 async function buildOut(){
   var a=EXP,stamp=$("eStamp").checked,f=curFmt();
   if(f==="zip")return [new File([await makeZip(a,stamp)],outName("zip"),{type:"application/zip"})];
-  if(f==="doc")return [new File([await buildWordHtml(a,stamp,true)],outName("doc"),{type:"application/msword"})];
-  if(f==="html")return [new File([await buildWordHtml(a,stamp)],outName("html"),{type:"text/html"})];
   if(f==="docx")return [new File([await buildDocx(a,stamp)],outName("docx"),{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"})];
   if(f==="pdf")return [new File([await buildPdf(a,stamp)],outName("pdf"),{type:"application/pdf"})];
   var fs=[];
@@ -723,12 +717,9 @@ async function buildOut(){
 var PRE={key:"",files:null};
 function preKey(){return curFmt()+"|"+($("eStamp").checked?1:0)+"|"+EXP.map(function(r){return r.id}).join(",")}
 function fmtTip(){
-  var f=curFmt(),n=$("eNote");
-  if(f==="doc"){n.textContent="On the computer, double click the file and it opens in Word. Then choose Save as and pick Word document (.docx) if you want a normal Word file. If your phone will not send a .doc file, choose Web page instead.";return}
-  if(f==="html"){n.textContent="Send works from the phone. On the computer, right click the file, choose Open with, Word, and edit it. You can also copy the photos and notes from it into your report.";return}
-  n.textContent=(f==="docx"||f==="zip")
-    ?"Some phones do not let the browser send Word or ZIP files. If Send does not open the share list, the file is saved in Downloads. Tap Open in the download message, or open Files, hold the file and choose Share."
-    :"Send opens the phone share list (Drive, mail, WhatsApp, Nearby Share). Save puts the file in Downloads.";
+  $("eNote").textContent=MODE==="save"
+    ?"The file is saved in Downloads on the phone. Tap Open in the download message, or find it in Files, Downloads. Word and ZIP files cannot be sent directly from this app, so use Send for PDF and photos."
+    :"Send opens the phone share list (mail, WhatsApp, Drive, Nearby Share).";
 }
 function prepare(){
   fmtTip();
@@ -789,7 +780,7 @@ document.addEventListener("visibilitychange",function(){if(document.hidden)camSt
   if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(function(){});
   showDraft();refreshAll();getPos(updGps);
   if("serviceWorker" in navigator&&location.protocol.indexOf("http")===0)navigator.serviceWorker.register("sw.js").catch(function(){});
-  window.__ph={buildWordHtml:buildWordHtml,buildDocx:buildDocx,buildPdf:buildPdf,PH:function(){return PH},addPhoto:addPhoto,handleFiles:handleFiles,makeZip:makeZip,buildZip:buildZip,stampBlob:stampBlob,show:show,openExport:openExport};
+  window.__ph={buildDocx:buildDocx,buildPdf:buildPdf,PH:function(){return PH},addPhoto:addPhoto,handleFiles:handleFiles,makeZip:makeZip,buildZip:buildZip,stampBlob:stampBlob,show:show,openExport:openExport};
 })();
 })();
 </script>
