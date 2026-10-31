@@ -217,7 +217,8 @@ textarea{min-height:104px;resize:vertical}
   <h1 id="eTitle">0 photos</h1>
   <label class="f" style="margin-top:12px">Format</label>
   <div class="fmts" id="fmts">
-    <label class="fmt"><input type="radio" name="fmt" value="html"><span><b>Word page</b><i>Opens in Word and can be edited. Phones can send it directly</i></span></label>
+    <label class="fmt"><input type="radio" name="fmt" value="doc"><span><b>Word page (.doc)</b><i>Opens in Word with a double click. Your phone may refuse to send it</i></span></label>
+    <label class="fmt"><input type="radio" name="fmt" value="html"><span><b>Web page (.html)</b><i>Phones can send it. Opens in the browser, or use Open with Word</i></span></label>
     <label class="fmt"><input type="radio" name="fmt" value="docx"><span><b>Word file</b><i>A real .docx. Some phones cannot send it directly</i></span></label>
     <label class="fmt"><input type="radio" name="fmt" value="pdf"><span><b>PDF</b><i>Ready to read or send, cannot be edited</i></span></label>
     <label class="fmt"><input type="radio" name="fmt" value="zip"><span><b>ZIP</b><i>Each photo as a file named with date and place, plus a list of the notes</i></span></label>
@@ -488,8 +489,8 @@ var EXP=[];
 function openExport(a){
   EXP=a.slice().sort(function(x,y){return x.ts-y.ts});
   $("eTitle").textContent=EXP.length+(EXP.length===1?" photo":" photos");
-  var lf="html";try{lf=localStorage.getItem(FKEY)||"html"}catch(e){}
-  var rb=document.querySelector('input[name="fmt"][value="'+lf+'"]')||document.querySelector('input[name="fmt"][value="html"]');rb.checked=true;
+  var lf="doc";try{lf=localStorage.getItem(FKEY)||"doc"}catch(e){}
+  var rb=document.querySelector('input[name="fmt"][value="'+lf+'"]')||document.querySelector('input[name="fmt"][value="doc"]');rb.checked=true;
   $("eStamp").checked=!!SET.stamp;$("eProg").style.display="none";$("ovE").className="ov on";
   prepare();
 }
@@ -623,8 +624,8 @@ async function buildDocx(a,stamp){
 
 /* ---------- Word page (one html file, opens in Word) ---------- */
 function dataUri(blob){return new Promise(function(res){var r=new FileReader();r.onload=function(){res(r.result)};r.readAsDataURL(blob)})}
-async function buildWordHtml(a,stamp){
-  var h='<!doctype html><html lang="en"><head><meta charset="utf-8"><title>ME-Tech Logshot</title><style>body{font-family:Calibri,"Segoe UI",Arial,sans-serif;font-size:11pt;color:#10263b}h1{color:#0a2a4a;font-size:20pt}p{margin:0 0 6pt 0}.l{font-weight:bold;color:#0a2a4a}.m{color:#5a6f82;font-size:9pt}</style></head><body><h1>ME-Tech Logshot</h1><p class="m">'+a.length+(a.length===1?" photo":" photos")+", exported "+dstr(Date.now())+" "+tstr(Date.now())+"</p><br>";
+async function buildWordHtml(a,stamp,asDoc){
+  var h=(asDoc?'<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>ME-Tech Logshot</title><!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->':'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>ME-Tech Logshot</title>')+'<style>body{font-family:Calibri,"Segoe UI",Arial,sans-serif;font-size:11pt;color:#10263b}h1{color:#0a2a4a;font-size:20pt}p{margin:0 0 6pt 0}.l{font-weight:bold;color:#0a2a4a}.m{color:#5a6f82;font-size:9pt}</style></head><body><h1>ME-Tech Logshot</h1><p class="m">'+a.length+(a.length===1?" photo":" photos")+", exported "+dstr(Date.now())+" "+tstr(Date.now())+"</p><br>";
   for(var i=0;i<a.length;i++){
     var r=a[i],b=stamp?await stampBlob(r):r.blob,uri=await dataUri(b);prog((i+1)/(a.length+1));
     var k=Math.min(600/r.w,420/r.h),w=Math.round(r.w*k),hh=Math.round(r.h*k);
@@ -633,7 +634,7 @@ async function buildWordHtml(a,stamp){
     h+="<br>";
   }
   prog(1);
-  return new Blob([h+"</body></html>"],{type:"text/html"});
+  return new Blob([h+"</body></html>"],{type:asDoc?"application/msword":"text/html"});
 }
 
 /* ---------- PDF ---------- */
@@ -704,13 +705,14 @@ async function buildPdf(a,stamp){
 
 /* ---------- export buttons ---------- */
 var FKEY="metech_photo_fmt_v1";
-function curFmt(){var r=document.querySelector('input[name="fmt"]:checked');return r?r.value:"html"}
+function curFmt(){var r=document.querySelector('input[name="fmt"]:checked');return r?r.value:"doc"}
 document.querySelectorAll('input[name="fmt"]').forEach(function(r){r.onchange=function(){try{localStorage.setItem(FKEY,r.value)}catch(e){}if(EXP.length)prepare()}});
 function saveCopy(blob,ts){try{download(new File([blob],fstr(ts)+"_photo.jpg",{type:"image/jpeg"}),fstr(ts)+"_photo.jpg")}catch(e){}}
 function outName(ext){return "ME-Tech Logshot "+fstr(Date.now())+"."+ext}
 async function buildOut(){
   var a=EXP,stamp=$("eStamp").checked,f=curFmt();
   if(f==="zip")return [new File([await makeZip(a,stamp)],outName("zip"),{type:"application/zip"})];
+  if(f==="doc")return [new File([await buildWordHtml(a,stamp,true)],outName("doc"),{type:"application/msword"})];
   if(f==="html")return [new File([await buildWordHtml(a,stamp)],outName("html"),{type:"text/html"})];
   if(f==="docx")return [new File([await buildDocx(a,stamp)],outName("docx"),{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"})];
   if(f==="pdf")return [new File([await buildPdf(a,stamp)],outName("pdf"),{type:"application/pdf"})];
@@ -722,6 +724,7 @@ var PRE={key:"",files:null};
 function preKey(){return curFmt()+"|"+($("eStamp").checked?1:0)+"|"+EXP.map(function(r){return r.id}).join(",")}
 function fmtTip(){
   var f=curFmt(),n=$("eNote");
+  if(f==="doc"){n.textContent="On the computer, double click the file and it opens in Word. Then choose Save as and pick Word document (.docx) if you want a normal Word file. If your phone will not send a .doc file, choose Web page instead.";return}
   if(f==="html"){n.textContent="Send works from the phone. On the computer, right click the file, choose Open with, Word, and edit it. You can also copy the photos and notes from it into your report.";return}
   n.textContent=(f==="docx"||f==="zip")
     ?"Some phones do not let the browser send Word or ZIP files. If Send does not open the share list, the file is saved in Downloads. Tap Open in the download message, or open Files, hold the file and choose Share."
