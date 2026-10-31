@@ -77,6 +77,12 @@ textarea{min-height:104px;resize:vertical}
 .item .tm{font-size:12px;color:var(--muted);margin-top:3px}
 .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:2px;padding:1px 6px;margin-left:6px}
 .tag.w{background:#fdeed3;color:var(--amber)}
+.item .b{padding-right:46px}
+.item .sh{position:absolute;right:8px;bottom:8px;width:42px;height:42px;border:1px solid var(--line);background:#fff;border-radius:3px;display:flex;align-items:center;justify-content:center;color:var(--navy);padding:0}
+.item .sh svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.sel .item .sh{display:none}
+.sel .item .b{padding-right:34px}
+.item{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .item .ck{position:absolute;right:10px;top:10px;width:24px;height:24px;border:2px solid var(--line);border-radius:3px;background:#fff;display:none}
 .sel .item .ck{display:block}
 .item.picked{border-color:var(--sky);background:#f4faff}
@@ -175,6 +181,7 @@ textarea{min-height:104px;resize:vertical}
       <h1 id="cnt">0 photos</h1>
       <button class="btn sec" id="selBtn" style="flex:0 0 auto;min-height:40px;padding:0 14px">Select</button>
     </div>
+    <div class="sub" id="hint">Tap a photo to edit its note. Tap the arrow on a photo to send or save it. Hold a photo, or press Select, to choose several.</div>
     <div class="search"><input type="search" id="q" placeholder="Search location, note or date"></div>
     <div id="list"></div>
   </div>
@@ -200,7 +207,7 @@ textarea{min-height:104px;resize:vertical}
   <label class="f" for="dNote">Note</label>
   <textarea id="dNote"></textarea>
   <div class="meta" id="dMeta"></div>
-  <div class="row" style="margin-top:16px"><button class="btn sec" id="dShare">Share</button><button class="btn sec" id="dDown">Save file</button></div>
+  <div class="row" style="margin-top:16px"><button class="btn blue full" id="dExp">Send or save this photo</button></div>
   <div class="row" style="margin-top:10px"><button class="btn red" id="dDel">Delete</button><button class="btn" id="dSave">Save changes</button></div>
 </div></div>
 
@@ -414,18 +421,31 @@ function refreshAll(){
 }
 function drawList(){
   var q=$("q").value.trim().toLowerCase(),a=saved(),n=a.length;
-  $("cnt").textContent=n+(n===1?" photo":" photos");
+  $("cnt").textContent=n+(n===1?" photo":" photos");$("hint").style.display=n?"":"none";
   if(q)a=a.filter(function(r){return (r.loc+" "+r.note+" "+dstr(r.ts)+" "+tstr(r.ts)).toLowerCase().indexOf(q)>=0});
   var L=$("list");L.className=SELMODE?"sel":"";
   if(!a.length){L.innerHTML='<div class="empty"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-8 9"/></svg><div>'+(n?"No photo matches.":"No photos yet. Take the first one.")+'</div></div>';updBar();return}
   var html="",day="";
   a.forEach(function(r){
     var dd=dstr(r.ts);if(dd!==day){day=dd;html+='<div class="day">'+dd+'</div>'}
-    html+='<div class="item'+(PICK[r.id]?" picked":"")+'" data-id="'+r.id+'"><img alt="" src="'+r.thumb+'"><div class="b"><div class="loc">'+esc(r.loc||"No location")+(r.note?"":'<span class="tag w">No note</span>')+'</div><div class="nt">'+esc(r.note)+'</div><div class="tm">'+tstr(r.ts)+(r.lat!=null?"  ·  GPS":"")+'</div></div><span class="ck"></span></div>';
+    html+='<div class="item'+(PICK[r.id]?" picked":"")+'" data-id="'+r.id+'"><img alt="" src="'+r.thumb+'"><div class="b"><div class="loc">'+esc(r.loc||"No location")+(r.note?"":'<span class="tag w">No note</span>')+'</div><div class="nt">'+esc(r.note)+'</div><div class="tm">'+tstr(r.ts)+(r.lat!=null?"  ·  GPS":"")+'</div></div><button class="sh" data-sh="'+r.id+'" aria-label="Export or send this photo"><svg viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4M5 12v7h14v-7"/></svg></button><span class="ck"></span></div>';
   });
   L.innerHTML=html;updBar();
 }
+var LP=null,LPFIRED=false;
+function lpStop(){clearTimeout(LP);LP=null}
+$("list").addEventListener("pointerdown",function(e){
+  LPFIRED=false;lpStop();
+  var it=e.target.closest(".item");if(!it||SELMODE||e.target.closest(".sh"))return;
+  LP=setTimeout(function(){LPFIRED=true;SELMODE=true;PICK={};PICK[it.getAttribute("data-id")]=true;$("selBtn").textContent="Cancel";drawList();try{if(navigator.vibrate)navigator.vibrate(20)}catch(x){}},550);
+});
+["pointerup","pointerleave","pointercancel"].forEach(function(n){$("list").addEventListener(n,function(){lpStop();if(LPFIRED)setTimeout(function(){LPFIRED=false},400)})});
+window.addEventListener("scroll",lpStop,true);
+$("list").addEventListener("contextmenu",function(e){if(e.target.closest(".item"))e.preventDefault()});
 $("list").onclick=function(e){
+  if(LPFIRED){LPFIRED=false;return}
+  var sh=e.target.closest(".sh");
+  if(sh){var rr=PH.filter(function(x){return x.id===sh.getAttribute("data-sh")})[0];if(rr)openExport([rr]);return}
   var it=e.target.closest(".item");if(!it)return;var id=it.getAttribute("data-id");
   if(SELMODE){PICK[id]=!PICK[id];if(!PICK[id])delete PICK[id];it.classList.toggle("picked",!!PICK[id]);updBar();return}
   openDetail(id);
@@ -460,9 +480,7 @@ function closeDetail(){$("ovD").className="ov";if(CURURL){URL.revokeObjectURL(CU
 $("dClose").onclick=closeDetail;
 $("dSave").onclick=async function(){if(!CUR)return;CUR.loc=$("dLoc").value.trim();CUR.note=$("dNote").value.trim();await pPut(CUR);closeDetail();refreshAll();toast("Saved")};
 $("dDel").onclick=async function(){if(!CUR)return;if(!confirm("Delete this photo?"))return;var r=CUR;await pDel(r.id);PH=PH.filter(function(x){return x!==r});closeDetail();refreshAll()};
-async function oneFile(r,stamp){var b=stamp?await stampBlob(r):r.blob;return new File([b],fileName(r,1,true),{type:"image/jpeg"})}
-$("dShare").onclick=async function(){if(!CUR)return;await shareFiles([await oneFile(CUR,SET.stamp)])};
-$("dDown").onclick=async function(){if(!CUR)return;var f=await oneFile(CUR,SET.stamp);download(f,f.name)};
+$("dExp").onclick=function(){if(!CUR)return;var r=CUR;closeDetail();openExport([r])};
 
 /* ---------- export ---------- */
 var EXP=[];
@@ -685,7 +703,14 @@ async function buildOut(){
 }
 var PRE={key:"",files:null};
 function preKey(){return curFmt()+"|"+($("eStamp").checked?1:0)+"|"+EXP.map(function(r){return r.id}).join(",")}
+function fmtTip(){
+  var f=curFmt(),n=$("eNote");
+  n.textContent=(f==="docx"||f==="zip")
+    ?"Some phones do not let the browser send Word or ZIP files. If Send does not open the share list, the file is saved in Downloads. Tap Open in the download message, or open Files, hold the file and choose Share."
+    :"Send opens the phone share list (Drive, mail, WhatsApp, Nearby Share). Save puts the file in Downloads.";
+}
 function prepare(){
+  fmtTip();
   var key=preKey();PRE={key:key,files:null};
   $("eSend").disabled=true;$("eSave").disabled=true;$("eStat").textContent="Preparing the file ...";
   buildOut().then(function(fs){
